@@ -35,9 +35,14 @@ pub(crate) fn draw_ui(frame: &mut Frame, app: &mut App) {
     frame.render_widget(log_widget, main[0]);
 
     let status_block = Block::default().borders(Borders::ALL).title("Status");
+    let active_speaker = app
+        .state
+        .active_speaker
+        .as_deref()
+        .unwrap_or("Narrator");
     let status_text = format!(
-        "Turn: {}\nLocation: {}\nState: {}",
-        app.state.turn, app.state.location, app.status
+        "Turn: {}\nLocation: {}\nSpeaker: {}\nState: {}",
+        app.state.turn, app.state.location, active_speaker, app.status
     );
     let status_widget = Paragraph::new(status_text).block(status_block);
     frame.render_widget(status_widget, side[0]);
@@ -72,17 +77,31 @@ fn build_log_text(entries: &[LogEntry]) -> (Text<'static>, usize) {
 
     for entry in entries {
         let (prefix, style) = match entry.kind {
-            LogKind::User => ("You: ", Style::default().fg(Color::Yellow)),
-            LogKind::Assistant => ("Narrator: ", Style::default().fg(Color::Green)),
-            LogKind::System => ("", Style::default().fg(Color::Blue)),
-            LogKind::Error => ("Error: ", Style::default().fg(Color::Red)),
+            LogKind::User => {
+                let label = entry.speaker.as_deref().unwrap_or("You");
+                (
+                    format!("{label}: "),
+                    Style::default().fg(Color::Yellow),
+                )
+            }
+            LogKind::Assistant => {
+                let label = entry.speaker.as_deref().unwrap_or("Narrator");
+                let color = if is_narrator_label(label) {
+                    Color::Green
+                } else {
+                    Color::Cyan
+                };
+                (format!("{label}: "), Style::default().fg(color))
+            }
+            LogKind::System => ("".to_string(), Style::default().fg(Color::Blue)),
+            LogKind::Error => ("Error: ".to_string(), Style::default().fg(Color::Red)),
         };
         let indent = " ".repeat(prefix.len());
         let mut first = true;
         for line in entry.text.lines() {
             if first {
                 lines.push(Line::from(vec![
-                    Span::styled(prefix.to_string(), style),
+                    Span::styled(prefix.clone(), style),
                     Span::raw(line.to_string()),
                 ]));
                 first = false;
@@ -98,4 +117,8 @@ fn build_log_text(entries: &[LogEntry]) -> (Text<'static>, usize) {
 
     let line_count = lines.len();
     (Text::from(lines), line_count)
+}
+
+fn is_narrator_label(label: &str) -> bool {
+    label.trim().eq_ignore_ascii_case("narrator")
 }

@@ -73,7 +73,7 @@ fn run_app(
                         app.busy = false;
                         match result {
                             Ok((reply, output_items, debug_summary)) => {
-                                app.push_log(app::LogKind::Assistant, reply.trim());
+                                app.push_assistant_reply(&reply);
                                 app.push_history_chunk(output_items);
                                 if debug {
                                     app.push_log(app::LogKind::System, debug_summary);

@@ -20,7 +20,7 @@ pub(crate) fn advance_turn(
     let mut input_items = Vec::new();
 
     let system_with_state = format!(
-        "{SYSTEM_PROMPT}\nCurrent turn: {}\nLocation: {}\nInventory: {}\nFlags: {}",
+        "{SYSTEM_PROMPT}\nCurrent turn: {}\nLocation: {}\nInventory: {}\nFlags: {}\nCurrent speaker: {}",
         state.turn,
         state.location,
         if state.inventory.is_empty() {
@@ -32,7 +32,11 @@ pub(crate) fn advance_turn(
             "None".to_string()
         } else {
             state.flags.join(", ")
-        }
+        },
+        state
+            .active_speaker
+            .as_deref()
+            .unwrap_or("Narrator")
     );
 
     input_items.push(json!({

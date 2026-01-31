@@ -40,7 +40,7 @@ pub(crate) fn handle_key_event(key: KeyEvent, app: &mut App) -> Result<bool> {
                 }
                 return Ok(false);
             }
-            app.push_log(LogKind::User, &input);
+            app.push_user_log(&input);
             app.push_user_message(&input);
             app.last_sent_input = Some(input.clone());
             app.pending_input = Some(input);
