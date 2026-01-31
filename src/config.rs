@@ -2,11 +2,15 @@ use std::env;
 use std::fs;
 use std::io;
 use std::path::Path;
+use std::time::Duration;
 
 use anyhow::{anyhow, Result};
+use reqwest::blocking::Client;
+use serde_json::json;
 
 pub(crate) const MODEL: &str = "gpt-5-mini";
 pub(crate) const API_URL: &str = "https://api.openai.com/v1/responses";
+pub(crate) const API_INPUT_TOKENS_URL: &str = "https://api.openai.com/v1/responses/input_tokens";
 pub(crate) const MAX_HISTORY_ITEMS: usize = 60;
 
 pub(crate) const SYSTEM_PROMPT: &str = r#"You are a text adventure game narrator.
@@ -28,49 +32,130 @@ Avoid meta commentary about being an AI.
 "#;
 
 pub(crate) fn load_or_prompt_api_key() -> Result<String> {
-    let env_key = env::var("OPENAI_API_KEY")
-        .ok()
-        .and_then(|key| {
-            let trimmed = key.trim().to_string();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed)
-            }
-        });
-
     let env_path = Path::new(".env");
-    if !env_path.exists() {
-        fs::write(env_path, "OPENAI_API_KEY=\n")?;
-    }
 
-    let _ = dotenvy::from_filename(env_path);
-
-    let file_key = env::var("OPENAI_API_KEY")
-        .ok()
-        .and_then(|key| {
-            let trimmed = key.trim().to_string();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed)
+    if let Some(key) = read_env_key() {
+        match validate_api_key(&key) {
+            Ok(()) => return Ok(key),
+            Err(err) => {
+                println!("OPENAI_API_KEY from environment is invalid: {err}");
             }
-        });
-
-    if let Some(key) = env_key.or(file_key) {
-        return Ok(key);
+        }
     }
 
-    println!("OPENAI_API_KEY not found. Paste your API key and press Enter:");
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-    let key = input.trim().to_string();
-    if key.is_empty() {
-        return Err(anyhow!("No API key provided."));
+    if let Some(key) = read_key_from_env_file(env_path) {
+        match validate_api_key(&key) {
+            Ok(()) => return Ok(key),
+            Err(err) => {
+                println!("OPENAI_API_KEY from .env is invalid: {err}");
+            }
+        }
     }
 
-    upsert_env_key(env_path, &key)?;
-    Ok(key)
+    loop {
+        println!("OPENAI_API_KEY not found. Paste your API key and press Enter:");
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        let key = input.trim();
+        if key.is_empty() {
+            println!("No API key provided. Please try again.");
+            continue;
+        }
+
+        match validate_api_key(key) {
+            Ok(()) => {
+                upsert_env_key(env_path, key)?;
+                return Ok(key.to_string());
+            }
+            Err(err) => {
+                println!("API key validation failed: {err}");
+            }
+        }
+    }
+}
+
+fn validate_api_key(api_key: &str) -> Result<()> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()?;
+    let body = json!({
+        "model": MODEL,
+        "input": "Test request to validate API key."
+    });
+    let response = client
+        .post(API_INPUT_TOKENS_URL)
+        .bearer_auth(api_key)
+        .json(&body)
+        .send()?;
+
+    if response.status().is_success() {
+        return Ok(());
+    }
+
+    let status = response.status();
+    let text = response.text().unwrap_or_default();
+    let message = extract_api_error_message(&text).unwrap_or(text);
+    Err(anyhow!("OpenAI API error ({status}): {message}"))
+}
+
+fn extract_api_error_message(body: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    let message = value
+        .get("error")?
+        .get("message")?
+        .as_str()?
+        .trim();
+    if message.is_empty() {
+        None
+    } else {
+        Some(message.to_string())
+    }
+}
+
+fn read_env_key() -> Option<String> {
+    env::var("OPENAI_API_KEY")
+        .ok()
+        .and_then(|key| normalize_key(&key))
+}
+
+fn read_key_from_env_file(path: &Path) -> Option<String> {
+    let contents = fs::read_to_string(path).ok()?;
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some(value) = trimmed.strip_prefix("OPENAI_API_KEY=") {
+            if let Some(key) = normalize_key(value) {
+                return Some(key);
+            }
+        }
+    }
+    None
+}
+
+fn normalize_key(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let unquoted = trimmed
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .or_else(|| {
+            trimmed
+                .strip_prefix('\'')
+                .and_then(|value| value.strip_suffix('\''))
+        })
+        .unwrap_or(trimmed);
+
+    let cleaned = unquoted.trim();
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned.to_string())
+    }
 }
 
 fn upsert_env_key(path: &Path, key: &str) -> Result<()> {
