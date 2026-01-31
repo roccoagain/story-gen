@@ -34,8 +34,11 @@ pub(crate) fn handle_key_event(key: KeyEvent, app: &mut App) -> Result<bool> {
             if input.is_empty() {
                 return Ok(false);
             }
-            if handle_command(&input, app)? {
-                return Ok(true);
+            if input.starts_with('/') {
+                if handle_command(&input, app)? {
+                    return Ok(true);
+                }
+                return Ok(false);
             }
             app.push_log(LogKind::User, &input);
             app.push_user_message(&input);
