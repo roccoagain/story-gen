@@ -7,6 +7,17 @@ use serde_json::{json, Value};
 use crate::app::GameState;
 use crate::config::{API_URL, MODEL, SYSTEM_PROMPT};
 
+fn build_request_body(input: &[Value]) -> Value {
+    json!({
+        "model": MODEL,
+        "input": input,
+        "max_output_tokens": 500,
+        "text": { "format": { "type": "text" } },
+        "reasoning": { "effort": "low" },
+        "include": ["reasoning.encrypted_content"]
+    })
+}
+
 pub(crate) fn advance_turn(
     api_key: &str,
     history: &[Vec<Value>],
@@ -55,22 +66,8 @@ pub(crate) fn advance_turn(
         "role": "user",
         "content": "Please respond with visible text only."
     }));
-    let body = json!({
-        "model": MODEL,
-        "input": input_items,
-        "max_output_tokens": 500,
-        "text": { "format": { "type": "text" } },
-        "reasoning": { "effort": "low" },
-        "include": ["reasoning.encrypted_content"]
-    });
-    let retry_body = json!({
-        "model": MODEL,
-        "input": retry_items,
-        "max_output_tokens": 500,
-        "text": { "format": { "type": "text" } },
-        "reasoning": { "effort": "low" },
-        "include": ["reasoning.encrypted_content"]
-    });
+    let body = build_request_body(&input_items);
+    let retry_body = build_request_body(&retry_items);
 
     let mut last_debug = String::new();
     for attempt in 0..2 {
