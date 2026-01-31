@@ -10,7 +10,12 @@ pub(crate) fn draw_ui(frame: &mut Frame, app: &mut App) {
 
     let vertical = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(8), Constraint::Length(3), Constraint::Length(1)])
+        .constraints([
+            Constraint::Min(8),
+            Constraint::Length(3),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
         .split(size);
 
     let main = Layout::default()
@@ -51,10 +56,14 @@ pub(crate) fn draw_ui(frame: &mut Frame, app: &mut App) {
         .wrap(Wrap { trim: false });
     frame.render_widget(input_widget, vertical[1]);
 
+    let status_line = build_status_line(app);
+    let status_widget = Paragraph::new(status_line);
+    frame.render_widget(status_widget, vertical[2]);
+
     let help_text =
         "Enter send | Up/Down scroll | /new | /quit | Ctrl+C quit | /help for commands";
     let help_widget = Paragraph::new(help_text);
-    frame.render_widget(help_widget, vertical[2]);
+    frame.render_widget(help_widget, vertical[3]);
 
     let cursor_x = vertical[1].x + 1 + app.input.chars().count() as u16;
     let cursor_y = vertical[1].y + 1;
@@ -136,4 +145,35 @@ fn build_centered_scene_text(scene_text: &str, area: Rect) -> Text<'static> {
 
 fn is_narrator_label(label: &str) -> bool {
     label.trim().eq_ignore_ascii_case("narrator")
+}
+
+fn build_status_line(app: &App) -> Line<'static> {
+    let (text, color) = if app.busy {
+        (build_thinking_indicator(app), Color::Yellow)
+    } else if app.status.eq_ignore_ascii_case("error") {
+        (app.status.clone(), Color::Red)
+    } else {
+        (app.status.clone(), Color::Green)
+    };
+
+    Line::from(Span::styled(text, Style::default().fg(color)))
+}
+
+fn build_thinking_indicator(app: &App) -> String {
+    const FRAMES: [&str; 8] = [
+        "[>     ]",
+        "[>>    ]",
+        "[>>>   ]",
+        "[ >>>  ]",
+        "[  >>> ]",
+        "[   >>>]",
+        "[    >>]",
+        "[     >]",
+    ];
+    let Some(start) = app.thinking_started else {
+        return "Thinking...".to_string();
+    };
+    let elapsed_ms = start.elapsed().as_millis() as u64;
+    let idx = ((elapsed_ms / 120) % FRAMES.len() as u64) as usize;
+    format!("Thinking {}", FRAMES[idx])
 }

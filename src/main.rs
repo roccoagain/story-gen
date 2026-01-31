@@ -8,7 +8,7 @@ use std::env;
 use std::io;
 use std::sync::mpsc::{self, TryRecvError};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use crossterm::{
@@ -96,6 +96,7 @@ fn run_app(
                     Ok(result) => {
                         app.pending_response = None;
                         app.busy = false;
+                        app.thinking_started = None;
                         match result {
                             Ok((reply, output_items, debug_summary)) => {
                                 app.push_assistant_reply(&reply);
@@ -130,6 +131,7 @@ fn run_app(
                     Err(TryRecvError::Disconnected) => {
                         app.pending_response = None;
                         app.busy = false;
+                        app.thinking_started = None;
                         app.push_log(app::LogKind::Error, "Response channel disconnected.");
                         app.status = "Error".to_string();
                     }
@@ -146,6 +148,7 @@ fn run_app(
             app.pending_response = Some(rx);
             app.busy = true;
             app.status = "Thinking...".to_string();
+            app.thinking_started = Some(Instant::now());
             terminal.draw(|frame| draw_ui(frame, &mut app))?;
 
             thread::spawn(move || {

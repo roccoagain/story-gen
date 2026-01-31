@@ -1,4 +1,5 @@
 use std::sync::mpsc::Receiver;
+use std::time::Instant;
 
 use anyhow::Result;
 use serde_json::{json, Value};
@@ -53,6 +54,7 @@ pub(crate) struct App {
     pub(crate) state: GameState,
     pub(crate) status: String,
     pub(crate) scene_ascii: String,
+    pub(crate) thinking_started: Option<Instant>,
 }
 
 impl App {
@@ -70,6 +72,7 @@ impl App {
             state: GameState::new(),
             status: "Ready".to_string(),
             scene_ascii: "Awaiting scene...".to_string(),
+            thinking_started: None,
         };
         app.push_log(LogKind::System, "Welcome! Describe what you do to begin.");
         app
@@ -164,6 +167,7 @@ impl App {
         self.state = GameState::new();
         self.status = "Ready".to_string();
         self.scene_ascii = "Awaiting scene...".to_string();
+        self.thinking_started = None;
         self.push_log(LogKind::System, "New game. Describe what you do to begin.");
     }
 
