@@ -5,17 +5,33 @@ use reqwest::blocking::Client;
 use serde_json::{json, Value};
 
 use crate::app::GameState;
-use crate::config::{API_URL, MODEL, SYSTEM_PROMPT};
+use crate::config::{
+    API_URL, MAIN_MAX_OUTPUT_TOKENS, MODEL, SCENE_MAX_OUTPUT_TOKENS, SCENE_SYSTEM_PROMPT,
+    SYSTEM_PROMPT,
+};
 
-fn build_request_body(input: &[Value]) -> Value {
+fn build_request_body_with_max(input: &[Value], max_output_tokens: u32) -> Value {
     json!({
         "model": MODEL,
         "input": input,
-        "max_output_tokens": 500,
+        "max_output_tokens": max_output_tokens,
         "text": { "format": { "type": "text" } },
-        "reasoning": { "effort": "low" },
-        "include": ["reasoning.encrypted_content"]
+        "reasoning": { "effort": "minimal" }
     })
+}
+
+fn build_scene_request_body(input: &[Value]) -> Value {
+    json!({
+        "model": MODEL,
+        "input": input,
+        "max_output_tokens": SCENE_MAX_OUTPUT_TOKENS,
+        "text": { "format": { "type": "text" } },
+        "reasoning": { "effort": "minimal" }
+    })
+}
+
+fn build_request_body(input: &[Value]) -> Value {
+    build_request_body_with_max(input, MAIN_MAX_OUTPUT_TOKENS)
 }
 
 pub(crate) fn advance_turn(
@@ -70,6 +86,7 @@ pub(crate) fn advance_turn(
     let retry_body = build_request_body(&retry_items);
 
     let mut last_debug = String::new();
+    let mut last_json = String::new();
     for attempt in 0..2 {
         let body_ref = if attempt == 0 { &body } else { &retry_body };
         let response = client
@@ -85,6 +102,9 @@ pub(crate) fn advance_turn(
         }
 
         let value: Value = response.json()?;
+        if debug {
+            last_json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        }
         let (text_opt, output_items, debug_summary) = extract_output_text_and_items(&value);
         last_debug = debug_summary;
         if let Some(text) = text_opt {
@@ -96,7 +116,79 @@ pub(crate) fn advance_turn(
     }
 
     let message = if debug {
-        format!("No output text found in response. Output summary: {last_debug}")
+        if last_json.is_empty() {
+            format!("No output text found in response. Output summary: {last_debug}")
+        } else {
+            format!(
+                "No output text found in response. Output summary: {last_debug}\nResponse json:\n{last_json}"
+            )
+        }
+    } else {
+        "No output text found in response.".to_string()
+    };
+    Err(anyhow!(message))
+}
+
+pub(crate) fn generate_scene(api_key: &str, context: &str, debug: bool) -> Result<String> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(60))
+        .build()?;
+
+    let input_items = vec![
+        json!({
+            "role": "system",
+            "content": SCENE_SYSTEM_PROMPT
+        }),
+        json!({
+            "role": "user",
+            "content": context
+        }),
+    ];
+
+    let mut retry_items = input_items.clone();
+    retry_items.push(json!({
+        "role": "user",
+        "content": "Please respond with visible ASCII art only."
+    }));
+
+    let body = build_scene_request_body(&input_items);
+    let retry_body = build_scene_request_body(&retry_items);
+
+    let mut last_debug = String::new();
+    let mut last_json = String::new();
+    for attempt in 0..2 {
+        let body_ref = if attempt == 0 { &body } else { &retry_body };
+        let response = client
+            .post(API_URL)
+            .bearer_auth(api_key)
+            .json(body_ref)
+            .send()?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().unwrap_or_default();
+            return Err(anyhow!("OpenAI API error ({status}): {text}"));
+        }
+
+        let value: Value = response.json()?;
+        if debug {
+            last_json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        }
+        let (text_opt, _output_items, debug_summary) = extract_output_text_and_items(&value);
+        last_debug = debug_summary;
+        if let Some(text) = text_opt {
+            return Ok(text);
+        }
+    }
+
+    let message = if debug {
+        if last_json.is_empty() {
+            format!("No output text found in response. Output summary: {last_debug}")
+        } else {
+            format!(
+                "No output text found in response. Output summary: {last_debug}\nResponse json:\n{last_json}"
+            )
+        }
     } else {
         "No output text found in response.".to_string()
     };
@@ -118,6 +210,9 @@ fn extract_output_text_and_items(value: &Value) -> (Option<String>, Vec<Value>, 
     let mut items = Vec::new();
     let mut debug_lines = Vec::new();
     let mut refusals = Vec::new();
+    if output.is_empty() {
+        debug_lines.push("output: <empty>".to_string());
+    }
     let fallback_text = value
         .get("output_text")
         .and_then(|v| v.as_str())
@@ -151,15 +246,10 @@ fn extract_output_text_and_items(value: &Value) -> (Option<String>, Vec<Value>, 
             ));
         }
         items.push(item.clone());
-        if item.get("type").and_then(|v| v.as_str()) != Some("message") {
-            continue;
-        }
-        if item.get("role").and_then(|v| v.as_str()) != Some("assistant") {
-            continue;
-        }
         if let Some(content) = item.get("content").and_then(|v| v.as_array()) {
             for part in content {
-                if part.get("type").and_then(|v| v.as_str()) == Some("output_text") {
+                let part_type = part.get("type").and_then(|v| v.as_str());
+                if matches!(part_type, Some("output_text") | Some("text")) {
                     if let Some(text) = part.get("text").and_then(|v| v.as_str()) {
                         texts.push(text.to_string());
                     }

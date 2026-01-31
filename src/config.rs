@@ -12,6 +12,8 @@ pub(crate) const MODEL: &str = "gpt-5-mini";
 pub(crate) const API_URL: &str = "https://api.openai.com/v1/responses";
 pub(crate) const API_INPUT_TOKENS_URL: &str = "https://api.openai.com/v1/responses/input_tokens";
 pub(crate) const MAX_HISTORY_ITEMS: usize = 60;
+pub(crate) const MAIN_MAX_OUTPUT_TOKENS: u32 = 800;
+pub(crate) const SCENE_MAX_OUTPUT_TOKENS: u32 = 600;
 
 pub(crate) const SYSTEM_PROMPT: &str = r#"You are a text adventure game narrator.
 Write in second person, present tense.
@@ -30,6 +32,13 @@ Keep responses concise: 1-2 short paragraphs, then ask what the player does next
 Do not use markdown code fences or JSON in your response.
 Avoid meta commentary about being an AI.
 "#;
+
+pub(crate) const SCENE_SYSTEM_PROMPT: &str = r#"You render ASCII scenes for a text adventure.
+Output ONLY the ASCII graphic. No labels, no explanations, no quotes, no markdown, no code fences.
+Use plain ASCII characters only.
+Keep the scene within 60 columns and 20 rows.
+Depict the most recent action, characters, and setting using simple shapes.
+If details are missing, draw a minimal but coherent scene."#;
 
 pub(crate) fn load_or_prompt_api_key() -> Result<String> {
     let env_path = Path::new(".env");

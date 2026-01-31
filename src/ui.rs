@@ -10,51 +10,38 @@ pub(crate) fn draw_ui(frame: &mut Frame, app: &mut App) {
 
     let vertical = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(5), Constraint::Length(3), Constraint::Length(1)])
+        .constraints([Constraint::Min(8), Constraint::Length(3), Constraint::Length(1)])
         .split(size);
 
     let main = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+        .constraints([Constraint::Percentage(100)])
         .split(vertical[0]);
 
-    let side = Layout::default()
+    let panels = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(7), Constraint::Min(5)])
-        .split(main[1]);
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(main[0]);
+
+    let scene_block = Block::default().borders(Borders::ALL).title("Scene");
+    let scene_text = if app.scene_ascii.trim().is_empty() {
+        "Awaiting scene..."
+    } else {
+        app.scene_ascii.as_str()
+    };
+    let scene_widget = Paragraph::new(scene_text).block(scene_block);
+    frame.render_widget(scene_widget, panels[0]);
 
     let (log_text, line_count) = build_log_text(&app.log);
     let log_block = Block::default().borders(Borders::ALL).title("Story");
-    let max_scroll = line_count.saturating_sub(main[0].height as usize);
+    let max_scroll = line_count.saturating_sub(panels[1].height as usize);
     app.scroll = app.scroll.min(max_scroll as u16);
 
     let log_widget = Paragraph::new(log_text)
         .block(log_block)
         .wrap(Wrap { trim: false })
         .scroll((app.scroll, 0));
-    frame.render_widget(log_widget, main[0]);
-
-    let status_block = Block::default().borders(Borders::ALL).title("Status");
-    let active_speaker = app
-        .state
-        .active_speaker
-        .as_deref()
-        .unwrap_or("Narrator");
-    let status_text = format!(
-        "Turn: {}\nLocation: {}\nSpeaker: {}\nState: {}",
-        app.state.turn, app.state.location, active_speaker, app.status
-    );
-    let status_widget = Paragraph::new(status_text).block(status_block);
-    frame.render_widget(status_widget, side[0]);
-
-    let inventory_block = Block::default().borders(Borders::ALL).title("Inventory");
-    let inventory_text = if app.state.inventory.is_empty() {
-        "Empty".to_string()
-    } else {
-        app.state.inventory.join("\n")
-    };
-    let inventory_widget = Paragraph::new(inventory_text).block(inventory_block);
-    frame.render_widget(inventory_widget, side[1]);
+    frame.render_widget(log_widget, panels[1]);
 
     let input_block = Block::default().borders(Borders::ALL).title("Input");
     let input_widget = Paragraph::new(app.input.as_str())

@@ -49,8 +49,10 @@ pub(crate) struct App {
     pub(crate) pending_input: Option<String>,
     pub(crate) last_sent_input: Option<String>,
     pub(crate) pending_response: Option<Receiver<Result<(String, Vec<Value>, String)>>>,
+    pub(crate) scene_pending_response: Option<Receiver<Result<String>>>,
     pub(crate) state: GameState,
     pub(crate) status: String,
+    pub(crate) scene_ascii: String,
 }
 
 impl App {
@@ -64,8 +66,10 @@ impl App {
             pending_input: None,
             last_sent_input: None,
             pending_response: None,
+            scene_pending_response: None,
             state: GameState::new(),
             status: "Ready".to_string(),
+            scene_ascii: "Awaiting scene...".to_string(),
         };
         app.push_log(LogKind::System, "Welcome! Describe what you do to begin.");
         app
@@ -156,9 +160,47 @@ impl App {
         self.pending_input = None;
         self.last_sent_input = None;
         self.pending_response = None;
+        self.scene_pending_response = None;
         self.state = GameState::new();
         self.status = "Ready".to_string();
+        self.scene_ascii = "Awaiting scene...".to_string();
         self.push_log(LogKind::System, "New game. Describe what you do to begin.");
+    }
+
+    pub(crate) fn build_scene_context(&self) -> String {
+        let inventory = if self.state.inventory.is_empty() {
+            "Empty".to_string()
+        } else {
+            self.state.inventory.join(", ")
+        };
+        let flags = if self.state.flags.is_empty() {
+            "None".to_string()
+        } else {
+            self.state.flags.join(", ")
+        };
+        let active_speaker = self
+            .state
+            .active_speaker
+            .as_deref()
+            .unwrap_or("Narrator");
+        let last_text = self
+            .latest_assistant_text()
+            .unwrap_or_else(|| "No recent narration.".to_string());
+
+        format!(
+            "Turn: {}\nLocation: {}\nInventory: {}\nFlags: {}\nActive speaker: {}\nRecent narration/dialogue:\n{}",
+            self.state.turn, self.state.location, inventory, flags, active_speaker, last_text
+        )
+    }
+
+    pub(crate) fn set_scene_ascii(&mut self, ascii: impl Into<String>) {
+        let mut text = ascii.into().replace("\r\n", "\n");
+        text = text.trim_matches('\n').to_string();
+        if text.trim().is_empty() {
+            self.scene_ascii = "Awaiting scene...".to_string();
+        } else {
+            self.scene_ascii = text;
+        }
     }
 
     fn trim_history(&mut self) {
@@ -172,6 +214,14 @@ impl App {
 
     fn history_item_count(&self) -> usize {
         self.history.iter().map(|chunk| chunk.len()).sum()
+    }
+
+    fn latest_assistant_text(&self) -> Option<String> {
+        self.log
+            .iter()
+            .rev()
+            .find(|entry| matches!(entry.kind, LogKind::Assistant) && !entry.text.trim().is_empty())
+            .map(|entry| entry.text.trim().to_string())
     }
 }
 
