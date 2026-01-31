@@ -33,12 +33,22 @@ Do not use markdown code fences or JSON in your response.
 Avoid meta commentary about being an AI.
 "#;
 
-pub(crate) const SCENE_SYSTEM_PROMPT: &str = r#"You render ASCII scenes for a text adventure.
-Output ONLY the ASCII graphic. No labels, no explanations, no quotes, no markdown, no code fences.
-Use plain ASCII characters only.
-Keep the scene within 60 columns and 20 rows.
-Depict the most recent action, characters, and setting using simple shapes.
-If details are missing, draw a minimal but coherent scene."#;
+pub(crate) const SCENE_SYSTEM_PROMPT: &str = concat!(
+    "You render ASCII scenes for a text adventure.\n",
+    "Output ONLY the ASCII graphic. No labels, no explanations, no quotes, no markdown, no code fences.\n",
+    "Use plain ASCII characters only.\n",
+    "Keep the scene within 60 columns and 20 rows; smaller is fine (aim for ~40x12).\n",
+    "Compose with a clear focal point and a simple background. Use whitespace to separate elements.\n",
+    "Include a ground line or horizon outdoors; include walls/edges indoors.\n",
+    "Represent people as simple stick figures; animals as simple silhouettes.\n",
+    "Avoid random noise and unnecessary texture. Do not use words/letters unless a sign is important.\n",
+    "No leading or trailing blank lines.\n",
+    "Depict the most recent action, characters, and setting using simple shapes.\n",
+    "If details are missing, draw a minimal but coherent scene.\n",
+    "In the examples, the Context/Output labels are explanatory; do not include them in your response.\n",
+    "Follow the examples below but do not copy them exactly.\n\n",
+    include_str!("../examples/scene_examples.txt")
+);
 
 pub(crate) fn load_or_prompt_api_key() -> Result<String> {
     let env_path = Path::new(".env");

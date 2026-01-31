@@ -29,7 +29,9 @@ pub(crate) fn draw_ui(frame: &mut Frame, app: &mut App) {
     } else {
         app.scene_ascii.as_str()
     };
-    let scene_widget = Paragraph::new(scene_text).block(scene_block);
+    let scene_inner = scene_block.inner(panels[0]);
+    let centered_scene = build_centered_scene_text(scene_text, scene_inner);
+    let scene_widget = Paragraph::new(centered_scene).block(scene_block);
     frame.render_widget(scene_widget, panels[0]);
 
     let (log_text, line_count) = build_log_text(&app.log);
@@ -104,6 +106,32 @@ fn build_log_text(entries: &[LogEntry]) -> (Text<'static>, usize) {
 
     let line_count = lines.len();
     (Text::from(lines), line_count)
+}
+
+fn build_centered_scene_text(scene_text: &str, area: Rect) -> Text<'static> {
+    let lines: Vec<&str> = scene_text.lines().collect();
+    let line_count = lines.len();
+    let inner_width = area.width as usize;
+    let inner_height = area.height as usize;
+    let top_pad = inner_height.saturating_sub(line_count) / 2;
+
+    let mut out: Vec<Line<'static>> = Vec::new();
+    for _ in 0..top_pad {
+        out.push(Line::from(""));
+    }
+
+    for line in lines {
+        let line_len = line.chars().count();
+        let left_pad = inner_width.saturating_sub(line_len) / 2;
+        let mut padded = String::with_capacity(left_pad + line_len);
+        if left_pad > 0 {
+            padded.push_str(&" ".repeat(left_pad));
+        }
+        padded.push_str(line);
+        out.push(Line::from(padded));
+    }
+
+    Text::from(out)
 }
 
 fn is_narrator_label(label: &str) -> bool {
