@@ -5,26 +5,13 @@ use reqwest::blocking::Client;
 use serde_json::{json, Value};
 
 use crate::app::GameState;
-use crate::config::{
-    API_URL, MAIN_MAX_OUTPUT_TOKENS, MODEL, SCENE_MAX_OUTPUT_TOKENS, SCENE_SYSTEM_PROMPT,
-    SYSTEM_PROMPT,
-};
+use crate::config::{API_URL, MAIN_MAX_OUTPUT_TOKENS, MODEL, SYSTEM_PROMPT};
 
 fn build_request_body_with_max(input: &[Value], max_output_tokens: u32) -> Value {
     json!({
         "model": MODEL,
         "input": input,
         "max_output_tokens": max_output_tokens,
-        "text": { "format": { "type": "text" } },
-        "reasoning": { "effort": "minimal" }
-    })
-}
-
-fn build_scene_request_body(input: &[Value]) -> Value {
-    json!({
-        "model": MODEL,
-        "input": input,
-        "max_output_tokens": SCENE_MAX_OUTPUT_TOKENS,
         "text": { "format": { "type": "text" } },
         "reasoning": { "effort": "minimal" }
     })
@@ -112,72 +99,6 @@ pub(crate) fn advance_turn(
         }
         if attempt == 0 {
             continue;
-        }
-    }
-
-    let message = if debug {
-        if last_json.is_empty() {
-            format!("No output text found in response. Output summary: {last_debug}")
-        } else {
-            format!(
-                "No output text found in response. Output summary: {last_debug}\nResponse json:\n{last_json}"
-            )
-        }
-    } else {
-        "No output text found in response.".to_string()
-    };
-    Err(anyhow!(message))
-}
-
-pub(crate) fn generate_scene(api_key: &str, context: &str, debug: bool) -> Result<String> {
-    let client = Client::builder()
-        .timeout(Duration::from_secs(60))
-        .build()?;
-
-    let input_items = vec![
-        json!({
-            "role": "system",
-            "content": SCENE_SYSTEM_PROMPT
-        }),
-        json!({
-            "role": "user",
-            "content": context
-        }),
-    ];
-
-    let mut retry_items = input_items.clone();
-    retry_items.push(json!({
-        "role": "user",
-        "content": "Please respond with visible ASCII art only."
-    }));
-
-    let body = build_scene_request_body(&input_items);
-    let retry_body = build_scene_request_body(&retry_items);
-
-    let mut last_debug = String::new();
-    let mut last_json = String::new();
-    for attempt in 0..2 {
-        let body_ref = if attempt == 0 { &body } else { &retry_body };
-        let response = client
-            .post(API_URL)
-            .bearer_auth(api_key)
-            .json(body_ref)
-            .send()?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().unwrap_or_default();
-            return Err(anyhow!("OpenAI API error ({status}): {text}"));
-        }
-
-        let value: Value = response.json()?;
-        if debug {
-            last_json = serde_json::to_string_pretty(&value).unwrap_or_default();
-        }
-        let (text_opt, _output_items, debug_summary) = extract_output_text_and_items(&value);
-        last_debug = debug_summary;
-        if let Some(text) = text_opt {
-            return Ok(text);
         }
     }
 

@@ -18,7 +18,7 @@ use crossterm::{
 };
 use ratatui::prelude::*;
 
-use crate::api::{advance_turn, generate_scene};
+use crate::api::advance_turn;
 use crate::app::App;
 use crate::config::load_or_prompt_api_key;
 use crate::input::handle_key_event;
@@ -65,31 +65,6 @@ fn run_app(
             }
         }
 
-        if let Some(rx) = &app.scene_pending_response {
-            match rx.try_recv() {
-                Ok(result) => {
-                    app.scene_pending_response = None;
-                    match result {
-                        Ok(scene) => app.set_scene_ascii(scene),
-                        Err(err) => {
-                            app.set_scene_ascii("Scene unavailable.");
-                            if debug {
-                                app.push_log(app::LogKind::Error, format!("{err:#}"));
-                            } else {
-                                app.push_log(app::LogKind::Error, err.to_string());
-                            }
-                        }
-                    }
-                }
-                Err(TryRecvError::Empty) => {}
-                Err(TryRecvError::Disconnected) => {
-                    app.scene_pending_response = None;
-                    app.set_scene_ascii("Scene unavailable.");
-                    app.push_log(app::LogKind::Error, "Scene channel disconnected.");
-                }
-            }
-        }
-
         if app.busy {
             if let Some(rx) = &app.pending_response {
                 match rx.try_recv() {
@@ -106,16 +81,6 @@ fn run_app(
                                 }
                                 app.state.turn = app.state.turn.saturating_add(1);
                                 app.status = "Ready".to_string();
-
-                                let scene_context = app.build_scene_context();
-                                let scene_key = api_key.clone();
-                                let (scene_tx, scene_rx) = mpsc::channel();
-                                app.scene_pending_response = Some(scene_rx);
-                                app.set_scene_ascii("Rendering scene...");
-                                thread::spawn(move || {
-                                    let result = generate_scene(&scene_key, &scene_context, debug);
-                                    let _ = scene_tx.send(result);
-                                });
                             }
                             Err(err) => {
                                 if debug {

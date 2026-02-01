@@ -18,37 +18,16 @@ pub(crate) fn draw_ui(frame: &mut Frame, app: &mut App) {
         ])
         .split(size);
 
-    let main = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(100)])
-        .split(vertical[0]);
-
-    let panels = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(main[0]);
-
-    let scene_block = Block::default().borders(Borders::ALL).title("Scene");
-    let scene_text = if app.scene_ascii.trim().is_empty() {
-        "Awaiting scene..."
-    } else {
-        app.scene_ascii.as_str()
-    };
-    let scene_inner = scene_block.inner(panels[0]);
-    let centered_scene = build_centered_scene_text(scene_text, scene_inner);
-    let scene_widget = Paragraph::new(centered_scene).block(scene_block);
-    frame.render_widget(scene_widget, panels[0]);
-
     let (log_text, line_count) = build_log_text(&app.log);
     let log_block = Block::default().borders(Borders::ALL).title("Story");
-    let max_scroll = line_count.saturating_sub(panels[1].height as usize);
+    let max_scroll = line_count.saturating_sub(vertical[0].height as usize);
     app.scroll = app.scroll.min(max_scroll as u16);
 
     let log_widget = Paragraph::new(log_text)
         .block(log_block)
         .wrap(Wrap { trim: false })
         .scroll((app.scroll, 0));
-    frame.render_widget(log_widget, panels[1]);
+    frame.render_widget(log_widget, vertical[0]);
 
     let input_block = Block::default().borders(Borders::ALL).title("Input");
     let input_widget = Paragraph::new(app.input.as_str())
@@ -115,32 +94,6 @@ fn build_log_text(entries: &[LogEntry]) -> (Text<'static>, usize) {
 
     let line_count = lines.len();
     (Text::from(lines), line_count)
-}
-
-fn build_centered_scene_text(scene_text: &str, area: Rect) -> Text<'static> {
-    let lines: Vec<&str> = scene_text.lines().collect();
-    let line_count = lines.len();
-    let inner_width = area.width as usize;
-    let inner_height = area.height as usize;
-    let top_pad = inner_height.saturating_sub(line_count) / 2;
-
-    let mut out: Vec<Line<'static>> = Vec::new();
-    for _ in 0..top_pad {
-        out.push(Line::from(""));
-    }
-
-    for line in lines {
-        let line_len = line.chars().count();
-        let left_pad = inner_width.saturating_sub(line_len) / 2;
-        let mut padded = String::with_capacity(left_pad + line_len);
-        if left_pad > 0 {
-            padded.push_str(&" ".repeat(left_pad));
-        }
-        padded.push_str(line);
-        out.push(Line::from(padded));
-    }
-
-    Text::from(out)
 }
 
 fn is_narrator_label(label: &str) -> bool {

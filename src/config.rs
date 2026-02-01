@@ -1,6 +1,7 @@
 use std::env;
 use std::fs;
 use std::io;
+use std::io::Write;
 use std::path::Path;
 use std::time::Duration;
 
@@ -13,7 +14,6 @@ pub(crate) const API_URL: &str = "https://api.openai.com/v1/responses";
 pub(crate) const API_INPUT_TOKENS_URL: &str = "https://api.openai.com/v1/responses/input_tokens";
 pub(crate) const MAX_HISTORY_ITEMS: usize = 60;
 pub(crate) const MAIN_MAX_OUTPUT_TOKENS: u32 = 800;
-pub(crate) const SCENE_MAX_OUTPUT_TOKENS: u32 = 600;
 
 pub(crate) const SYSTEM_PROMPT: &str = r#"You are a text adventure game narrator.
 Write in second person, present tense.
@@ -32,26 +32,6 @@ Keep responses concise: 1-2 short paragraphs, then ask what the player does next
 Do not use markdown code fences or JSON in your response.
 Avoid meta commentary about being an AI.
 "#;
-
-pub(crate) const SCENE_SYSTEM_PROMPT: &str = concat!(
-    "You render ASCII scenes for a text adventure.\n",
-    "Output ONLY the ASCII graphic. No labels, no explanations, no quotes, no markdown, no code fences.\n",
-    "Use plain ASCII characters only.\n",
-    "Do NOT output any letters (A-Z, a-z) or digits (0-9) anywhere in the drawing.\n",
-    "If you catch yourself using letters/digits, erase and redraw using only symbols and whitespace.\n",
-    "Allowed characters example set: | - _ / \\\\ ( ) [ ] { } < > = * + ~ ^ . , ' \" ` : ; ! ?\n",
-    "Keep the scene within 60 columns and 20 rows; smaller is fine (aim for ~40x12).\n",
-    "Compose with a clear focal point and a simple background. Use whitespace to separate elements.\n",
-    "Include a ground line or horizon outdoors; include walls/edges indoors.\n",
-    "Represent people as simple stick figures; animals as simple silhouettes.\n",
-    "Avoid random noise and unnecessary texture. NEVER use words or letters in the drawing.\n",
-    "No leading or trailing blank lines.\n",
-    "Depict the most recent action, characters, and setting using simple shapes.\n",
-    "If details are missing, draw a minimal but coherent scene.\n",
-    "In the examples, the Context/Output labels are explanatory; do not include them in your response.\n",
-    "Follow the examples below but do not copy them exactly.\n\n",
-    include_str!("../examples/scene_examples.txt")
-);
 
 pub(crate) fn load_or_prompt_api_key() -> Result<String> {
     let env_path = Path::new(".env");
@@ -97,6 +77,8 @@ pub(crate) fn load_or_prompt_api_key() -> Result<String> {
 }
 
 fn validate_api_key(api_key: &str) -> Result<()> {
+    println!("Validating OpenAI API key...");
+    let _ = io::stdout().flush();
     let client = Client::builder()
         .timeout(Duration::from_secs(15))
         .build()?;
